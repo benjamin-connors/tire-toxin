@@ -5,22 +5,30 @@ from matplotlib.dates import num2date
 
 # User-defined variables
 file_path = 'AT200_013.xlsx'  # Replace with your actual file path
-stn = 'station2'  # User-defined station name
+stn = 'stationAT'  # User-defined station name
 loc = 'RL'  # User-defined location
-initial_dump_number = 1  # User-defined initial dump number
+initial_dump_number = 1  # User-defined initial dump number (dump number used for first dump in file)
 date = ''  # Will be derived from the first timestamp of the subset data if left blank
 sens = ''  # Will be derived from filename or metadata, if left blank
 
-# Load metadata and data
-df = pd.read_excel(file_path, header=None)
-header_lines = 0
-for index, row in df.iterrows():
-    if pd.to_datetime(row, errors='coerce').notna().any():  # Check if row contains a datetime
-        header_lines = index
+# Dynamically identify the first row containing a datetime value
+data_preview = pd.read_excel(file_path, header=None)  # Read file without assuming column names
+first_data_row = None  # Initialize variable for the first data row (the first row with datetime)
+
+# Identify the first row containing a datetime value
+for i, row in data_preview.iterrows():
+    if pd.to_datetime(row, errors='coerce').notna().any():  # Check if any cell can be parsed as datetime
+        first_data_row = i  # This row contains the first data
         break
 
-metadata = df.iloc[:header_lines]  # Extract metadata rows
-df = pd.read_excel(file_path, skiprows=header_lines)  # Reload data with proper headers
+if first_data_row is None:
+    raise ValueError("No datetime values found in the file. Please check the file format.")
+
+# Store metadata (all lines above column names) in a dataframe
+metadata = data_preview.iloc[:first_data_row - 2]  # Metadata includes all rows above column names
+
+# Load data with identified column names and skipping metadata rows
+df = pd.read_excel(file_path, header=first_data_row - 1)               # No header row; we'll assign column names directly
 
 # Ensure datetime column is parsed as datetime and naive
 if 'DT' in df.columns:
@@ -28,6 +36,7 @@ if 'DT' in df.columns:
 elif 'DateTime' in df.columns:
     dt_col = 'DateTime'
 else:
+    print(df.head())
     raise ValueError("Expected datetime column not found. Please rename the datetime column or update the code.")
 df[dt_col] = pd.to_datetime(df[dt_col]).dt.tz_localize(None)
 
@@ -42,7 +51,9 @@ else:
 # Check if 'sens' is provided, else detect from filename or metadata
 if not sens:
     if 'AT' in file_path:  # If filename contains ATXXX pattern
-        sens = file_path.split('AT')[1][:4]  # Extract the ATXXX portion
+        # Extract the full ATXXX pattern (including 'AT')
+        start_idx = file_path.find('AT')
+        sens = file_path[start_idx:start_idx + 5]  # Extract 'AT' and the following 3 digits
     elif 'TM7.' in metadata.iloc[-1, 0]:  # Check metadata for TM7.XXX
         sens = 'TM7.' + metadata.iloc[-1, 0].split('TM7.')[1]  # Ensure TM7. part is included
 
@@ -93,15 +104,20 @@ def on_click(event):
             subset_times.sort()
             new_df = df[(df[dt_col] >= subset_times[0]) & (df[dt_col] <= subset_times[1])]
 
-            # Combine metadata and subset data (OLD WORKING STRUCTURE)
-            output_df = pd.concat([metadata, new_df], ignore_index=True)
-            
-            # Save the combined DataFrame
+            # Define the output file name
             output_file = f"{stn}_{date}_dump{dump_counter}_{loc}_{sens}.xlsx"
-            output_df.to_excel(output_file, index=False, header=False)  # Disable headers to match old behavior
-
+            
+            # Open the original file with openpyxl to maintain the structure and metadata
+            with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
+                # Write the metadata (everything above the first data row)
+                metadata.to_excel(writer, index=False, header=False, startrow=0)
+                
+                # Write the data below the metadata (starting from first_data_row which is already identified)
+                new_df.to_excel(writer, index=False, header=True, startrow=first_data_row-1)
+            
             print(f'New dataframe saved as {output_file}')
             print(f"Dump {dump_counter} times: {subset_times}")
+            
             dump_counter += 1  # Increment dump number for the next file
 
             points.clear()  # Reset points for the next dump selection
