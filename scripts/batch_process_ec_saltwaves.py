@@ -2,14 +2,14 @@ import os
 from select_saltwaves import select_saltwaves
 
 # Specify the folder containing the .xlsx files to be processed
-data_directory = r'H:\tire-toxin\data\EC\20241106\raw'  # Use raw string for Windows paths
+data_directory = r'H:\tire-toxin\data\EC\20241113\raw'  # Use raw string for Windows paths
 
 # Determine the output directory as one level up from `raw`, renamed to `processed`
 output_directory = os.path.join(os.path.dirname(data_directory), 'processed')
 os.makedirs(output_directory, exist_ok=True)  # Ensure the output directory exists
 
-# Get list of all .xlsx files in the target directory
-files = [f for f in os.listdir(data_directory) if f.endswith('.xlsx')]
+# Get list of all .xlsx files in the target directory, excluding files starting with '~'
+files = [f for f in os.listdir(data_directory) if f.endswith('.xlsx') and not f.startswith('~')]
 
 # Loop through all .xlsx files in the directory
 for file in files:
