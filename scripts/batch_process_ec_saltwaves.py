@@ -2,7 +2,8 @@ import os
 from select_saltwaves import select_saltwaves
 
 # Specify the folder containing the .xlsx files to be processed
-data_directory = r'H:\tire-toxin\data\EC\20241113\raw'  # Use raw string for Windows paths
+# data_directory = r'H:\tire-toxin\data\EC\20241113\raw'  # Use raw string for Windows paths
+data_directory = r'C:\Users\oconnorb\projects\tire-toxin\test_data'  # Use raw string for Windows paths
 
 # Determine the output directory as one level up from `raw`, renamed to `processed`
 output_directory = os.path.join(os.path.dirname(data_directory), 'processed')

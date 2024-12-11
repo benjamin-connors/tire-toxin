@@ -1,4 +1,5 @@
 data
+test_data
 *idea
 working
 venv*
@@ -6,3 +7,6 @@ AT*
 QQM*
 *.xlsx
 *meeting*
+eva
+*temp*
+*test*
