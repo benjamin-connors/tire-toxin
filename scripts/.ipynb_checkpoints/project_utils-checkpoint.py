@@ -93,7 +93,7 @@ def determine_file_type_and_site(file):
     - file (Path): The path of the file to process.
 
     Returns:
-    - df (pd.DataFrame): DataFrame loaded from the input file.
+    - df_corrected (pd.DataFrame): DataFrame loaded from the input file.
     - site_name (str): The site name identified from the file.
     - file_type (str): 'BT' or 'non-BT' indicating the type of file.
     - output_file (Path): The path to the output file based on the site and file type.
@@ -105,13 +105,13 @@ def determine_file_type_and_site(file):
     if "Plot Title" in str(first_row.iloc[0, 0]):
         print("Non-BT File Identified. Reading File")
         colnames = ['Datetime', 'Absolute Pressure (kPa)', 'Temperature (°C)']
-        df = pd.read_excel(file, header=1, index_col=0, parse_dates=True, usecols="B:D", names=colnames)
+        df_corrected = pd.read_excel(file, header=1, index_col=0, parse_dates=True, usecols="B:D", names=colnames)
         file_type = 'non-BT'
     elif "Date-Time" in str(first_row.iloc[0, 1]):
         print("BT File Detected!")
         colnames = ['Datetime', 'Differential Pressure (kPa)', 'Absolute Pressure (kPa)',
                      'Temperature (°C)', 'Water Level (m)', 'Barometric Pressure (kPa)']
-        df = pd.read_excel(file, header=0, index_col=0, parse_dates=True, usecols="B:G", names=colnames)
+        df_corrected = pd.read_excel(file, header=0, index_col=0, parse_dates=True, usecols="B:G", names=colnames)
         file_type = 'BT'
     else:
         raise ValueError("Unknown file format")
@@ -119,19 +119,17 @@ def determine_file_type_and_site(file):
     # Identify site
     if ("22084122" in file.name) or ("cat_beaconsBT" in file.name):  # cat_beaconsBT
         site_name = "cat_beaconsBT"
-    elif ("22084123" in file.name) or ("northfield_poolBT" in file.name):  # northfield_poolBT
-        site_name = "northfield_poolBT"
+    elif ("22084123" in file.name) or ("northfieldBT" in file.name):  # northfieldBT
+        site_name = "northfieldBT"
     elif ("22084124" in file.name) or ("chase_usBT" in file.name):  # chase_usBT
         site_name = "chase_usBT"
     elif ("cat_beacons_" in file.name):  # cat_beacon
         site_name = "cat_beacons"
-    elif ("northfield_bridgeBT" in file.name):
-        site_name = "northfield_bridgeBT"
-    elif ("northfield_bridge" in file.name):  # northfield_bridge
-        site_name = "northfield_bridge"
-    elif ("chase_us" in file.name) or ("chase_upstream" in file.name):  # chase_us
+    elif ("northfield_" in file.name):  # northfield
+        site_name = "northfield"
+    elif ("chase_us" in file.name):  # chase_us
         site_name = "chase_us"
-    elif ("chase_ds" in file.name) or ("chase_downstream" in file.name):  # chase_ds
+    elif ("chase_ds" in file.name):  # chase_ds
         site_name = "chase_ds"
     else:
         raise ValueError("Unknown site")
@@ -141,16 +139,14 @@ def determine_file_type_and_site(file):
     output_file = output_directory / f"{site_name}_stage_master.xlsx"
 
     # Determine the BT file path (if applicable)
-    if site_name in ['cat_beacons', 'chase_us']:
+    if site_name in ['northfield', 'cat_beacons', 'chase_us']:
         bt_file = output_directory / f"{site_name}BT_stage_master.xlsx"
     elif site_name == "chase_ds":
         bt_file = output_directory / "chase_usBT_stage_master.xlsx"
-    elif site_name == "northfield_bridge":
-        bt_file = output_directory / "northfield_poolBT_stage_master.xlsx"
     else:
         bt_file = None
 
-    return df, site_name, file_type, output_file, bt_file
+    return df_corrected, site_name, file_type, output_file, bt_file
 
 
 def calculate_differential_pressure(df, df_baro):
@@ -159,23 +155,15 @@ def calculate_differential_pressure(df, df_baro):
 
     Parameters:
     - df (pd.DataFrame): DataFrame containing 'Absolute Pressure (kPa)' and 'Differential Pressure (kPa)' columns.
-    - df_baro (pd.DataFrame): DataFrame containing the barometric pressure data for the correction in a 'Barometric Pressure (kPa)' column.
+    - df_baro (pd.DataFrame): DataFrame containing the barometric presssure data for the correction in a 'Barometric Pressure (kPa)' column.
 
     Returns:
     - df (pd.DataFrame): DataFrame with 'Differential Pressure (kPa)' filled for missing values.
     - corrected_baro_count (int): Number of corrections made.
-    - failed_baro_count (int): Number of corrections that failed due to no valid data within the threshold.
     """
+    
     corrected_baro_count = 0
     failed_baro_count = 0
-
-    duplicated_rows = df_baro[df_baro.index.duplicated(keep=False)]
-
-    # Sort the duplicated rows by index
-    duplicated_rows_sorted = duplicated_rows.sort_index()
-
-    # Export the sorted duplicated rows to an Excel file
-    duplicated_rows_sorted.to_excel('duplicated_rows_sorted.xlsx', index=True)
 
     # Apply correction only to rows where 'Differential Pressure (kPa)' is missing
     if 'Differential Pressure (kPa)' in df.columns:
@@ -184,24 +172,27 @@ def calculate_differential_pressure(df, df_baro):
         # If there are rows with missing data
         if missing_data_mask.any():
             for idx, row in df[missing_data_mask].iterrows():
-                # Proceed only if Absolute Pressure is available
-                if pd.notna(row['Absolute Pressure (kPa)']):
-                    row_time = pd.to_datetime(row.name)
+                # Calculate the differential pressure for missing values
+                if pd.isna(row['Differential Pressure (kPa)']) and pd.notna(row['Absolute Pressure (kPa)']):
+                    # Calculate the time difference between the current row and all barometric timestamps
+                    time_diff = np.abs(df_baro.index - pd.to_datetime(row.name))
 
-                    # Attempt to find the nearest time
-                    nearest_idx = df_baro.index.get_indexer([row_time], method='nearest')[0]
-                    nearest_time = df_baro.index[nearest_idx]
+                    # Filter for valid timestamps within the 10-minute window
+                    valid_times = time_diff[time_diff <= pd.Timedelta(minutes=10)]
 
-                    # Check if the nearest time is within the 10-minute threshold
-                    if abs(nearest_time - row_time) <= pd.Timedelta(minutes=10):
+                    if not valid_times.empty:
+                        # Get the index (datetime) corresponding to the minimum time difference
+                        nearest_time = time_diff[time_diff == valid_times.min()].index[0]  # This gives the actual datetime index
+
+                        # Get the barometric pressure at the nearest timestamp
                         barometric_pressure = df_baro.loc[nearest_time, 'Barometric Pressure (kPa)']
 
                         # Calculate Differential Pressure
                         diff_pressure = row['Absolute Pressure (kPa)'] - barometric_pressure
                         df.at[idx, 'Differential Pressure (kPa)'] = diff_pressure
                         corrected_baro_count += 1
+
                     else:
-                        # Nearest time is outside the valid range
                         failed_baro_count += 1
 
     return df, corrected_baro_count, failed_baro_count
