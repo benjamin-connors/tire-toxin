@@ -81,57 +81,72 @@ def main():
 
     # If a file is uploaded, process it
     if uploaded_file is not None:
-        # Read the uploaded file into a DataFrame
-        df = pd.read_excel(uploaded_file)
-
-        # Check if 'EC.T' column exists in the uploaded file
-        if 'EC.T' in df.columns:
-            # Create the plot
-            fig = px.line(df, x=df.index, y='EC.T', title="EC.T Plot", labels={"x": "Index", "EC.T": "EC.T [uS/cm]"})
-
-            # Create a list to store selected points' indices
-            selected_points = []
-
-            # Create columns for input boxes for point selection (below the plot)
-            st.write("### Select Points on the Plot")
-
-            # Create columns for input fields to select points, placed below the plot
-            cols = st.columns(6)
-
-            # For each column, create a text input for the user to specify the index
-            for i, col in enumerate(cols):
-                label = f"Point {i + 1}"
-                # Create a text input box for each point (index selection)
-                index = col.text_input(f"Index for {label}", value=str(i), key=f"input_{i}")
-                try:
-                    # Ensure the index is valid (integer and within range)
-                    index = int(index)
-                    if 0 <= index < len(df):  # Check if index is within valid range
-                        selected_points.append(index)
-                        # Add the point to the plot
-                        fig.add_trace(go.Scatter(
-                            x=[index], 
-                            y=[df.loc[index, 'EC.T']], 
-                            mode='markers+text',  # 'markers+text' to show both markers and text
-                            name=label,
-                            text=[f"{label}"],  # Label above the point
-                            textposition='top center',  # Position text above the point
-                            showlegend=False  # Do not show legend for individual points
-                        ))
-                    else:
-                        st.warning(f"Index {index} for {label} is out of range. Please enter a valid index.")
-                except ValueError:
-                    st.warning(f"Invalid index entered for {label}. Please enter a valid integer.")
-
-            # Display the updated plot with points selected
-            st.plotly_chart(fig, use_container_width=True)
-
-            # Display the EC.T values corresponding to the selected indices
-            y_values = [df.loc[index, 'EC.T'] for index in selected_points]
-            df_cf['EC [uS/cm]'][:len(y_values)] = y_values
-
+        # First try reading just the headers
+        df_preview = pd.read_excel(uploaded_file, nrows=0)
+        
+        if 'EC.T' in df_preview.columns:
+            # Format 1: Headers in first row
+            uploaded_file.seek(0)  # Reset file pointer
+            df = pd.read_excel(uploaded_file)
+            ec_column = 'EC.T'
+            st.write('TYPE1!')
         else:
-            st.warning("The uploaded file does not contain an 'EC.T' column.")
+            # Try format 2: Headers in row 4
+            uploaded_file.seek(0)  # Reset file pointer
+            df_preview = pd.read_excel(uploaded_file, header=3, nrows=0)
+            
+            if 'EC.T(uS/cm)' in df_preview.columns:
+                uploaded_file.seek(0)  # Reset file pointer
+                df = pd.read_excel(uploaded_file, header=3)
+                ec_column = 'EC.T(uS/cm)'
+                st.write('TYPE2!')
+
+            else:
+                st.error("The uploaded file doesn't match any expected format. Please ensure it contains either 'EC.T' or 'EC.T(uS/cm)' columns.")
+                st.stop()
+
+        # Create the plot using the detected column
+        fig = px.line(df, x=df.index, y=ec_column, 
+                      title=f"{ec_column} Plot", 
+                      labels={"x": "Index", ec_column: "EC.T [uS/cm]"})
+
+        # Create a list to store selected points' indices
+        selected_points = []
+
+        # Create columns for input boxes for point selection (below the plot)
+        st.write("### Select Points on the Plot")
+        st.write("<p style='color: grey; font-style: italic;'>hint: hover cursor on plot to display index</p>", unsafe_allow_html=True)
+        # Create columns for input fields to select points, placed below the plot
+        cols = st.columns(6)
+
+        # For each column, create a text input for the user to specify the index
+        for i, col in enumerate(cols):
+            label = f"Point {i + 1}"
+            index = col.text_input(f"Index for {label}", value=str(i), key=f"input_{i}")
+            try:
+                index = int(index)
+                if 0 <= index < len(df):
+                    selected_points.append(index)
+                    fig.add_trace(go.Scatter(
+                        x=[index], 
+                        y=[df.loc[index, ec_column]], 
+                        mode='markers+text',
+                        name=label,
+                        text=[f"{label}"],
+                        textposition='top center',
+                        showlegend=False
+                    ))
+                else:
+                    st.warning(f"Index {index} for {label} is out of range. Please enter a valid index.")
+            except ValueError:
+                st.warning(f"Invalid index entered for {label}. Please enter a valid integer.")
+
+        # Display the updated plot with points selected
+        st.plotly_chart(fig, use_container_width=True)
+
+        # Display the EC.T values corresponding to the selected indices
+        y_values = [df.loc[index, ec_column] for index in selected_points]
+        df_cf['EC [uS/cm]'][:len(y_values)] = y_values
 
     # Show the CF DataFrame
     st.write("### CF DataFrame")
@@ -160,7 +175,6 @@ def main():
             st.success(f"File saved successfully at: {file_name}")
     else:
         st.warning("Please complete all required fields before saving the file.")
-
 
     # Download CF Excel File
     st.write("### Download CF File")
