@@ -165,6 +165,15 @@ def main():
     df_cf["Delta EC"] = df_cf["EC [uS/cm]"].diff()  # Difference from the previous row
     df_cf = st.data_editor(df_cf, num_rows="dynamic", hide_index=True)
 
+    # Check if all Delta EC values (excluding NaN) are within 0.5 of each other
+    delta_within_threshold = df_cf["Delta EC"].dropna().apply(lambda x: abs(x - df_cf["Delta EC"].dropna().mean()) <= 0.5).all()
+
+    # Display the visual flag
+    if delta_within_threshold:
+        st.markdown("<p style='color: green; font-weight: bold;'>✔️ Delta EC values are consistent within ±0.5</p>", unsafe_allow_html=True)
+    else:
+        st.markdown("<p style='color: red; font-weight: bold;'>❌ Delta EC values are not consistent within ±0.5</p>", unsafe_allow_html=True)
+
     # "Save to Hydrology Shared" Button
     st.write("### Save CF File to \Hydrology_Shared")
     if field_sampling_date and sensor and site:
