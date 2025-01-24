@@ -89,6 +89,11 @@ def main():
             uploaded_file.seek(0)  # Reset file pointer
             df = pd.read_excel(uploaded_file)
             ec_column = 'EC.T'
+        elif 'EC.T(uS/cm)' in df_preview.columns:
+            # Format 1: Headers in first row
+            uploaded_file.seek(0)  # Reset file pointer
+            df = pd.read_excel(uploaded_file)
+            ec_column = 'EC.T(uS/cm)'
         else:
             # Try format 2: Headers in row 4
             uploaded_file.seek(0)  # Reset file pointer
