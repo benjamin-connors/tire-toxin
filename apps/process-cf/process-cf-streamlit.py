@@ -89,7 +89,6 @@ def main():
             uploaded_file.seek(0)  # Reset file pointer
             df = pd.read_excel(uploaded_file)
             ec_column = 'EC.T'
-            st.write('TYPE1!')
         else:
             # Try format 2: Headers in row 4
             uploaded_file.seek(0)  # Reset file pointer
@@ -99,7 +98,6 @@ def main():
                 uploaded_file.seek(0)  # Reset file pointer
                 df = pd.read_excel(uploaded_file, header=3)
                 ec_column = 'EC.T(uS/cm)'
-                st.write('TYPE2!')
 
             else:
                 st.error("The uploaded file doesn't match any expected format. Please ensure it contains either 'EC.T' or 'EC.T(uS/cm)' columns.")
@@ -109,6 +107,7 @@ def main():
         fig = px.line(df, x=df.index, y=ec_column, 
                       title=f"{ec_column} Plot", 
                       labels={"x": "Index", ec_column: "EC.T [uS/cm]"})
+    
 
         # Create a list to store selected points' indices
         selected_points = []
@@ -116,7 +115,6 @@ def main():
         # Create columns for input boxes for point selection (below the plot)
         st.write("### Select Points on the Plot")
         st.write("<p style='color: grey; font-style: italic;'>hint: hover cursor on plot to display index</p>", unsafe_allow_html=True)
-        # Create columns for input fields to select points, placed below the plot
         cols = st.columns(6)
 
         # For each column, create a text input for the user to specify the index
@@ -141,6 +139,15 @@ def main():
             except ValueError:
                 st.warning(f"Invalid index entered for {label}. Please enter a valid integer.")
 
+        # Add y-axis slider below the plot
+        y_min, y_max = st.slider(
+            "Y-axis range",
+            min_value=float(df[ec_column].min()),
+            max_value=float(df[ec_column].max()),
+            value=(float(df[ec_column].min()), float(df[ec_column].max()))
+        )
+        fig.update_layout(yaxis=dict(range=[y_min, y_max]))
+
         # Display the updated plot with points selected
         st.plotly_chart(fig, use_container_width=True)
 
@@ -150,6 +157,7 @@ def main():
 
     # Show the CF DataFrame
     st.write("### CF DataFrame")
+    df_cf["Delta EC"] = df_cf["EC [uS/cm]"].diff()  # Difference from the previous row
     df_cf = st.data_editor(df_cf, num_rows="dynamic", hide_index=True)
 
     # "Save to Hydrology Shared" Button
@@ -180,7 +188,6 @@ def main():
     st.write("### Download CF File")
     
     if field_sampling_date and sensor and site:
-        # Prepare the header data
         formatted_date = field_sampling_date.strftime("%Y%m%d")
         header_data = {
             "Field Sampling Date": field_sampling_date.strftime("%Y-%m-%d"),
@@ -191,12 +198,10 @@ def main():
             "Primary solution [g/m3]": primary_solution,
         }
 
-        # Create a buffer to hold the Excel file in memory
         buffer = io.BytesIO()
         save_to_excel_with_headers(df_cf, buffer, header_data)
         buffer.seek(0)
 
-        # Immediately trigger the download without any extra button
         st.download_button(
             label="Download CF Excel File",
             data=buffer,
