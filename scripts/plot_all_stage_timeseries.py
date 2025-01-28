@@ -3,13 +3,13 @@ import matplotlib.pyplot as plt
 
 # List of stage files to be read
 stage_files = [
-    "h:\\tire-toxin\\data\\Stage\\processed\\northfield_poolBT_stage_master.xlsx",
-    "h:\\tire-toxin\\data\\Stage\\processed\\cat_beacons_stage_master.xlsx",
-    "h:\\tire-toxin\\data\\Stage\\processed\\chase_ds_stage_master.xlsx",
-    "h:\\tire-toxin\\data\\Stage\\processed\\chase_us_stage_master.xlsx",
-    "h:\\tire-toxin\\data\\Stage\\processed\\chase_usBT_stage_master.xlsx",
-    "h:\\tire-toxin\\data\\Stage\\processed\\northfield_bridge_stage_master.xlsx",
-    "h:\\tire-toxin\\data\\Stage\\processed\\northfield_bridgeBT_stage_master.xlsx"
+    "h:\\tire-toxin\\data\\Discharge\\Stage\\processed\\northfield_poolBT_stage_master.xlsx",
+    "h:\\tire-toxin\\data\\Discharge\\Stage\\processed\\cat_beacons_stage_master.xlsx",
+    "h:\\tire-toxin\\data\\Discharge\\Stage\\processed\\chase_ds_stage_master.xlsx",
+    "h:\\tire-toxin\\data\\Discharge\\Stage\\processed\\chase_us_stage_master.xlsx",
+    "h:\\tire-toxin\\data\\Discharge\\Stage\\processed\\chase_usBT_stage_master.xlsx",
+    "h:\\tire-toxin\\data\\Discharge\\Stage\\processed\\northfield_bridge_stage_master.xlsx",
+    "h:\\tire-toxin\\data\\Discharge\\Stage\\processed\\northfield_bridgeBT_stage_master.xlsx"
 ]
 
 # Dictionary to hold each DataFrame
