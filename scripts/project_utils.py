@@ -4,7 +4,7 @@ from openpyxl.utils.dataframe import dataframe_to_rows
 from openpyxl import Workbook
 import pandas as pd
 import numpy as np
-import sys
+from pathlib import Path
 
 # Default decimal formatting
 DEFAULT_DECIMALS = {
@@ -137,7 +137,7 @@ def determine_file_type_and_site(file):
         raise ValueError("Unknown site")
 
     # Generate the output file path
-    output_directory = file.parents[2] / 'processed'
+    output_directory = Path(r"H:\tire-toxin\data\Discharge\Stage\processed")
     output_file = output_directory / f"{site_name}_stage_master.xlsx"
 
     # Determine the BT file path (if applicable)
