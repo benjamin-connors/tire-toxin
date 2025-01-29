@@ -25,7 +25,13 @@ for ws in sh.worksheets():
     
     # Loop through unique 'submissionid' in df_ws
     for submissionid in df_ws['submissionid'].unique():
-        # Check if a file for this submissionid already exists
+
+        # Check if submissioncontains salt dilution
+        if not (df_ws.loc[df_ws['submissionid'] == submissionid, 'Salt_Dilution'].str.lower() == 'yes').any():
+            print(f"Submission {submissionid} has no salt dilution. Skipping.")
+            continue  # Skip this submission
+
+        # Check if a metadata file for this submissionid already exists
         if any(str(submissionid) in file for file in existing_files):
             print(f"Metadata for submissionid {submissionid} already exists. Skipping.")
             continue  # Skip this submission if the file exists
