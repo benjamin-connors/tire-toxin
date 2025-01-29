@@ -148,7 +148,10 @@ if uploaded_file is not None:
     output_directory = st.text_input('\Hydrology_Shared Output Directory', value=f"H:\\tire-toxin\\data\\Discharge\\Manual_salt\\EC\\processed\\{stn}\\{date_str}")
 
     # Generating the filename with dynamic elements
-    filename = f"{stn}_{date_str}_dump{current_dump}_{sensor_loc}_{sensor_name}.xlsx"
+    if sensor_loc != 'baseline':
+        filename = f"{stn}_{date_str}_dump{current_dump}_{sensor_loc}_{sensor_name}.xlsx"
+    else:
+        filename = f"{stn}_{date_str}_{sensor_loc}_{sensor_name}.xlsx"
     output_file = os.path.join(output_directory, filename)
 
     # Option to save the subset as a new Excel file
