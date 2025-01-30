@@ -158,7 +158,7 @@ if uploaded_file is not None:
             [sensor_name] + ["AT200", "AT201", "AT202", "AT203", "TM7.537", "TM7.538"]
         )
     else:
-        sensor_name = st.selectbox("Enter sensor name", ["AT200", "AT201", "AT202", "AT203", "TM7.537", "TM7.538", "Other"])
+        sensor_name = st.selectbox("Enter sensor name", ["AT200", "AT201", "AT202", "AT203", "TM7.537", "TM7.538", "Other"], index=None)
         if sensor_name == "Other":
             sensor_name = st.text_input("Please specify the sensor name")
 
