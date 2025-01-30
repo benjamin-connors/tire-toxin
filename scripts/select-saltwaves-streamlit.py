@@ -84,6 +84,59 @@ if uploaded_file is not None:
     first_timestamp = df[dt_col].iloc[0]
     date_str = first_timestamp.strftime('%Y%m%d')
 
+    # Detect duplicated timestamps
+    duplicated_timestamps = df[df.duplicated('Datetime', keep=False)]
+
+    if not duplicated_timestamps.empty:
+        st.warning("Duplicated timestamps detected. Would you like to apply a correction?")
+        proceed_with_correction = st.radio("Apply correction?", ['Yes', 'No'])
+
+        if proceed_with_correction == 'Yes':
+            # Correction routine based on your provided script
+            df_original = df.copy()
+            df_corrected = df.copy()
+
+            for i in range(len(duplicated_timestamps)):
+                stacked_start_index = duplicated_timestamps.index[i]
+                gap_start = df_original['Datetime'].iloc[stacked_start_index - 1]
+                gap_end = df_original['Datetime'].iloc[stacked_start_index]
+                time_grid = pd.date_range(gap_start + pd.Timedelta(seconds=5), gap_end, freq='5s')
+
+                # Unstack the duplicated data
+                for column in ['EC', 'Temp', 'EC.T']:
+                    stacked_data = df_original.loc[stacked_start_index:stacked_start_index + len(time_grid) - 1, column].values
+                    df_corrected.loc[stacked_start_index:stacked_start_index + len(time_grid) - 1, 'Datetime'] = time_grid
+                    df_corrected.loc[stacked_start_index:stacked_start_index + len(time_grid) - 1, column] = stacked_data
+
+            # Display correction applied
+            st.success("Correction applied. Please review the result in the figure below.")
+
+            # Plot the original vs corrected data
+            fig, ax = plt.subplots(figsize=(10, 6))
+            ax.plot(df_original['Datetime'], df_original['EC.T'], label="Original EC.T(uS/cm)", color='red', linestyle='--')
+            ax.plot(df_corrected['Datetime'], df_corrected['EC.T'], label="Corrected EC.T(uS/cm)", color='blue')
+            ax.set_xlabel('Time')
+            ax.set_ylabel('Electrical Conductivity (EC.T(uS/cm))')
+            ax.set_title('Original vs Corrected EC Time Series')
+            ax.legend()
+            ax.grid(True)
+            plt.xticks(rotation=45)
+            st.pyplot(fig)
+
+            proceed_with_corrected_data = st.radio("Are you happy with the correction?", ['Yes', 'No'])
+            if proceed_with_corrected_data == 'Yes':
+                st.success("Proceeding with the corrected data.")
+                # Proceed with the corrected data to the next part of the app
+                df = df_corrected
+            elif proceed_with_corrected_data == 'No':
+                st.warning("Correction aborted. Proceeding with the original data.")
+                df = df_original
+        else:
+            st.warning("Correction not applied. Proceeding with the original data.")
+
+    else:
+        st.success("No duplicated timestamps found. Proceeding with the original data.")
+
     # Dynamic Inputs Section (appears after file upload)
     st.subheader("User Inputs")
     
@@ -159,5 +212,3 @@ if uploaded_file is not None:
         os.makedirs(output_directory, exist_ok=True)
         filtered_df.to_excel(output_file, index=False)
         st.success(f"Subset saved to {output_file}")
-
-      
