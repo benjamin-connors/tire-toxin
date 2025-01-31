@@ -179,7 +179,7 @@ def main():
         if field_sampling_date and sensor and site:
             if st.button("Save CF File to \Hydrology_Shared"):
                 formatted_date = field_sampling_date.strftime("%Y%m%d")
-                output_directory = rf"H:\tire-toxin\data\EC\CF\{site}\{formatted_date}"
+                output_directory = rf"H:\tire-toxin\data\Discharge\Manual_salt\CF\{site}\{formatted_date}"
                 file_name = rf"{output_directory}\{site}_{formatted_date}_{sensor}_CFvals.xlsx"
                 os.makedirs(output_directory, exist_ok=True)
 
