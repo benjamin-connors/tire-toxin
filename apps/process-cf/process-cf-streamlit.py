@@ -62,19 +62,6 @@ def save_to_excel_with_headers(dataframe, file_path_or_buffer, header_data):
 def main():
     st.title("CHRL Tire Toxin CF Processing")
 
-    # Field inputs
-    field_sampling_date = st.date_input("Field Sampling Date", value=None)
-    calibration_date = st.date_input("Calibration Date", value=None)
-    site = st.selectbox("Site", ["chase_bridge", "cat_beacons", "northfield", "Other"], index=None)
-    if site == "Other":
-        site = st.text_input("Enter custom site name", value=None)
-    sensor = st.selectbox("Sensor", ["AT200", "AT201", "AT202", "AT203", "TM7.537", "TM7.538"], index=None)
-    lab_or_field = st.selectbox("Lab/Field", ["Field", "Lab"])
-    primary_solution = st.number_input("Primary solution [g/m3]", value=30000)    
-
-    # Initialize df_cf with default values
-    df_cf = pd.DataFrame(default_data)
-
     # File upload for Excel data
     st.write("### Upload CF Timeseries File")
     uploaded_file = st.file_uploader("Upload an Excel file", type=["xlsx"])
@@ -107,6 +94,19 @@ def main():
             else:
                 st.error("The uploaded file doesn't match any expected format. Please ensure it contains either 'EC.T' or 'EC.T(uS/cm)' columns.")
                 st.stop()
+
+        # Field inputs
+        field_sampling_date = st.date_input("Field Sampling Date", value=None)
+        calibration_date = st.date_input("Calibration Date", value=None)
+        site = st.selectbox("Site", ["chase_bridge", "cat_beacons", "northfield", "Other"], index=None)
+        if site == "Other":
+            site = st.text_input("Enter custom site name", value=None)
+        sensor = st.selectbox("Sensor", ["AT200", "AT201", "AT202", "AT203", "TM7.537", "TM7.538"], index=None)
+        lab_or_field = st.selectbox("Lab/Field", ["Field", "Lab"])
+        primary_solution = st.number_input("Primary solution [g/m3]", value=30000)    
+
+        # Initialize df_cf with default values
+        df_cf = pd.DataFrame(default_data)
 
         # Create the plot using the detected column
         fig = px.line(df, x=df.index, y=ec_column, 
@@ -160,29 +160,50 @@ def main():
         y_values = [df.loc[index, ec_column] for index in selected_points]
         df_cf['EC [uS/cm]'][:len(y_values)] = y_values
 
-    # Show the CF DataFrame
-    st.write("### CF DataFrame")
-    df_cf["Delta EC"] = df_cf["EC [uS/cm]"].diff()  # Difference from the previous row
-    df_cf = st.data_editor(df_cf, num_rows="dynamic", hide_index=True)
+        # Show the CF DataFrame
+        st.write("### CF DataFrame")
+        df_cf["Delta EC"] = df_cf["EC [uS/cm]"].diff()  # Difference from the previous row
+        df_cf = st.data_editor(df_cf, num_rows="dynamic", hide_index=True)
 
-    # Check if all Delta EC values (excluding NaN) are within 0.5 of each other
-    delta_within_threshold = df_cf["Delta EC"].dropna().apply(lambda x: abs(x - df_cf["Delta EC"].dropna().mean()) <= 0.5).all()
+        # Check if all Delta EC values (excluding NaN) are within 0.5 of each other
+        delta_within_threshold = df_cf["Delta EC"].dropna().apply(lambda x: abs(x - df_cf["Delta EC"].dropna().mean()) <= 0.5).all()
 
-    # Display the visual flag
-    if delta_within_threshold:
-        st.markdown("<p style='color: green; font-weight: bold;'>✔️ Delta EC values are consistent within ±0.5</p>", unsafe_allow_html=True)
-    else:
-        st.markdown("<p style='color: red; font-weight: bold;'>❌ Delta EC values are not consistent within ±0.5</p>", unsafe_allow_html=True)
+        # Display the visual flag
+        if delta_within_threshold:
+            st.markdown("<p style='color: green; font-weight: bold;'>✔️ Delta EC values are consistent within ±0.5</p>", unsafe_allow_html=True)
+        else:
+            st.markdown("<p style='color: red; font-weight: bold;'>❌ Delta EC values are not consistent within ±0.5</p>", unsafe_allow_html=True)
 
-    # "Save to Hydrology Shared" Button
-    st.write("### Save CF File to \Hydrology_Shared")
-    if field_sampling_date and sensor and site:
-        if st.button("Save CF File to \Hydrology_Shared"):
+        # "Save to Hydrology Shared" Button
+        st.write("### Save CF File to \Hydrology_Shared")
+        if field_sampling_date and sensor and site:
+            if st.button("Save CF File to \Hydrology_Shared"):
+                formatted_date = field_sampling_date.strftime("%Y%m%d")
+                output_directory = rf"H:\tire-toxin\data\EC\CF\{site}\{formatted_date}"
+                file_name = rf"{output_directory}\{site}_{formatted_date}_{sensor}_CFvals.xlsx"
+                os.makedirs(output_directory, exist_ok=True)
+
+                header_data = {
+                    "Field Sampling Date": field_sampling_date.strftime("%Y-%m-%d"),
+                    "Calibration Date": calibration_date.strftime("%Y-%m-%d") if calibration_date else "N/A",
+                    "Site": site,
+                    "Sensor": sensor,
+                    "Lab/Field": lab_or_field,
+                    "Primary solution [g/m3]": primary_solution,
+                }
+
+                with open(file_name, "wb") as file:
+                    save_to_excel_with_headers(df_cf, file, header_data)
+
+                st.success(f"File saved successfully at: {file_name}")
+        else:
+            st.warning("Please complete all required fields before saving the file.")
+
+        # Download CF Excel File
+        st.write("### Download CF File")
+        
+        if field_sampling_date and sensor and site:
             formatted_date = field_sampling_date.strftime("%Y%m%d")
-            output_directory = rf"H:\tire-toxin\data\EC\CF\{site}\{formatted_date}"
-            file_name = rf"{output_directory}\{site}_{formatted_date}_{sensor}_CFvals.xlsx"
-            os.makedirs(output_directory, exist_ok=True)
-
             header_data = {
                 "Field Sampling Date": field_sampling_date.strftime("%Y-%m-%d"),
                 "Calibration Date": calibration_date.strftime("%Y-%m-%d") if calibration_date else "N/A",
@@ -192,39 +213,18 @@ def main():
                 "Primary solution [g/m3]": primary_solution,
             }
 
-            with open(file_name, "wb") as file:
-                save_to_excel_with_headers(df_cf, file, header_data)
+            buffer = io.BytesIO()
+            save_to_excel_with_headers(df_cf, buffer, header_data)
+            buffer.seek(0)
 
-            st.success(f"File saved successfully at: {file_name}")
-    else:
-        st.warning("Please complete all required fields before saving the file.")
-
-    # Download CF Excel File
-    st.write("### Download CF File")
-    
-    if field_sampling_date and sensor and site:
-        formatted_date = field_sampling_date.strftime("%Y%m%d")
-        header_data = {
-            "Field Sampling Date": field_sampling_date.strftime("%Y-%m-%d"),
-            "Calibration Date": calibration_date.strftime("%Y-%m-%d") if calibration_date else "N/A",
-            "Site": site,
-            "Sensor": sensor,
-            "Lab/Field": lab_or_field,
-            "Primary solution [g/m3]": primary_solution,
-        }
-
-        buffer = io.BytesIO()
-        save_to_excel_with_headers(df_cf, buffer, header_data)
-        buffer.seek(0)
-
-        st.download_button(
-            label="Download CF Excel File",
-            data=buffer,
-            file_name=f"{site}_{formatted_date}_{sensor}_CFvals.xlsx",
-            mime="application/vnd.ms-excel"
-        )
-    else:
-        st.warning("Please complete all required fields before downloading.")
+            st.download_button(
+                label="Download CF Excel File",
+                data=buffer,
+                file_name=f"{site}_{formatted_date}_{sensor}_CFvals.xlsx",
+                mime="application/vnd.ms-excel"
+            )
+        else:
+            st.warning("Please complete all required fields before downloading.")
 
 if __name__ == "__main__":
     main()
