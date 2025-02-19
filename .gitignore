@@ -12,3 +12,6 @@ eva
 *test*
 *__pycache__*
 *checkpoints*
+*local*
+.spy*
+*fig*
