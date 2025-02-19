@@ -137,7 +137,7 @@ def determine_file_type_and_site(file):
         raise ValueError("Unknown site")
 
     # Generate the output file path
-    output_directory = Path(r"H:\tire-toxin\data\Discharge\Stage\processed")
+    output_directory = Path(r"H:\tire-toxin\data\Discharge\Stage\test")
     output_file = output_directory / f"{site_name}_stage_master.xlsx"
 
     # Determine the BT file path (if applicable)
