@@ -69,8 +69,14 @@ for ws in sh.worksheets():
             'Salt_Dump.Dump_Notes'
         ]
         
-        # Create a DataFrame for salt dump data
-        salt_dump_df = df_salt_dump[salt_dump_columns]
+        # Keep columns for writing to metadata file
+        df_salt_dump = df_salt_dump[salt_dump_columns]
+
+        # Rename columns for writing to file
+        df_salt_dump.columns = [
+            'Dump Number', 'Dump Time', 'Salt Mass (g)', 
+            'Staff Gauge', 'PT Sensor', 'Dump Notes'
+        ]
 
         # Extract all 'Photo_X' columns and concatenate URLs into one variable
         photo_links = []
@@ -109,14 +115,11 @@ for ws in sh.worksheets():
             })
             sensor_data.to_excel(writer, sheet_name='Metadata', startrow=7, index=False, header=False)
 
-            # Write the salt dump data (starting from row 11)
-            salt_dump_df.columns = [
-                'Dump Number', 'Dump Time', 'Salt Mass (g)', 
-                'Staff Gauge', 'PT Sensor', 'Dump Notes'
-            ]
-            salt_dump_df = salt_dump_df.drop_duplicates()
-            salt_dump_df = salt_dump_df.astype(str)  # Convert all columns to strings
-            salt_dump_df.to_excel(writer, sheet_name='Metadata', startrow=13, index=False)
+
+            # Drop duplicate and write the salt dump data to metadata file
+            df_salt_dump = df_salt_dump.drop_duplicates()
+            df_salt_dump = df_salt_dump.astype(str)  # Convert all columns to strings
+            df_salt_dump.to_excel(writer, sheet_name='Metadata', startrow=13, index=False)
 
             # Write photo links to separate columns in the same row as "Photo Links:"
             worksheet = writer.sheets['Metadata']
