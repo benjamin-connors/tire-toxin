@@ -5,6 +5,7 @@ from openpyxl import Workbook
 import pandas as pd
 import numpy as np
 from pathlib import Path
+from openpyxl.utils import get_column_letter
 
 # Default decimal formatting
 DEFAULT_DECIMALS = {
@@ -15,7 +16,7 @@ DEFAULT_DECIMALS = {
     'Barometric Pressure (kPa)': 3
 }
 
-def format_and_save_excel(df_corrected, output_file, sheet_name='Sheet1', decimals=None):
+def save_formatted_stage_file(df_corrected, output_file, sheet_name='Sheet1', decimals=None):
     """
     Formats and saves a DataFrame to an Excel file with OpenPyxl, applying number formatting for display.
 
@@ -83,75 +84,59 @@ def format_and_save_excel(df_corrected, output_file, sheet_name='Sheet1', decima
     # Save workbook to file
     workbook.save(output_file)
 
-def determine_file_type_and_site(file):
-    """
-    Determines the file type (BT or non-BT), the site name, and the associated BT file 
-    if applicable. Returns the dataframe loaded from the file, site name, file type, 
-    output file path, and BT file path.
-
-    Parameters:
-    - file (Path): The path of the file to process.
-
-    Returns:
-    - df (pd.DataFrame): DataFrame loaded from the input file.
-    - site_name (str): The site name identified from the file.
-    - file_type (str): 'BT' or 'non-BT' indicating the type of file.
-    - output_file (Path): The path to the output file based on the site and file type.
-    - bt_file (Path or None): The path to the BT file for barometric correction, if applicable.
-    """
+def process_stage_file(file):
     # Determine file type (bluetooth / non-bluetooth) and load file accordingly
     first_row = pd.read_excel(file, nrows=1, header=None)
+    # Define the column order for master files
+    master_cols = ['Differential Pressure (kPa)', 'Absolute Pressure (kPa)', 'Temperature (°C)', 'Barometric Pressure (kPa)', 'Water Level (m)']
 
     if "Plot Title" in str(first_row.iloc[0, 0]):
         print("Non-BT File Identified. Reading File")
+        # Define the column names you want to read from file and read in data
         colnames = ['Datetime', 'Absolute Pressure (kPa)', 'Temperature (°C)']
         df = pd.read_excel(file, header=1, index_col=0, parse_dates=True, usecols="B:D", names=colnames)
-        file_type = 'non-BT'
+        # Add any missing columns filled with nan
+        for col in master_cols:
+            if col not in df.columns:
+                df[col] = pd.NA
+        # Reorder columns to match final column order
+        df = df[master_cols]
+
     elif "Date-Time" in str(first_row.iloc[0, 1]):
         print("BT File Detected!")
         colnames = ['Datetime', 'Differential Pressure (kPa)', 'Absolute Pressure (kPa)',
                      'Temperature (°C)', 'Water Level (m)', 'Barometric Pressure (kPa)']
         df = pd.read_excel(file, header=0, index_col=0, parse_dates=True, usecols="B:G", names=colnames)
-        file_type = 'BT'
+        # Add any missing columns filled with nan
+        for col in master_cols:
+            if col not in df.columns:
+                df[col] = pd.NA
+        # Reorder columns to match final column order
+        df = df[master_cols]
     else:
         raise ValueError("Unknown file format")
 
-    # Identify site
-    if ("22084122" in file.name) or ("cat_beaconsBT" in file.name):  # cat_beaconsBT
-        site_name = "cat_beaconsBT"
-    elif ("22084123" in file.name) or ("northfield_poolBT" in file.name):  # northfield_poolBT
-        site_name = "northfield_poolBT"
-    elif ("22084124" in file.name) or ("chase_usBT" in file.name):  # chase_usBT
-        site_name = "chase_usBT"
-    elif ("cat_beacons_" in file.name):  # cat_beacon
-        site_name = "cat_beacons"
-    elif ("northfield_bridgeBT" in file.name):
-        site_name = "northfield_bridgeBT"
-    elif ("northfield_bridge" in file.name):  # northfield_bridge
-        site_name = "northfield_bridge"
-    elif ("chase_us" in file.name) or ("chase_upstream" in file.name):  # chase_us
-        site_name = "chase_us"
-    elif ("chase_ds" in file.name) or ("chase_downstream" in file.name):  # chase_ds
-        site_name = "chase_ds"
-    else:
-        raise ValueError("Unknown site")
+    return df
 
-    # Generate the output file path
-    output_directory = Path(r"H:\tire-toxin\data\Discharge\Stage\test")
-    output_file = output_directory / f"{site_name}_stage_master.xlsx"
-
-    # Determine the BT file path (if applicable)
-    if site_name in ['cat_beacons', 'chase_us']:
-        bt_file = output_directory / f"{site_name}BT_stage_master.xlsx"
-    elif site_name == "chase_ds":
-        bt_file = output_directory / "chase_usBT_stage_master.xlsx"
+def read_baro_file(site_name):
+    master_directory = Path(r"H:\tire-toxin\data\Discharge\Stage\processed")
+    # Determine the baro file path (if applicable)
+    if site_name in ['chase_us', 'chase_ds']:
+        baro_file = master_directory / f"chase_usBT_stage_master.xlsx"
+    elif site_name == "cat_beacons":
+        baro_file = master_directory / f"cat_beaconsBT_stage_master.xlsx"
     elif site_name == "northfield_bridge":
-        bt_file = output_directory / "northfield_poolBT_stage_master.xlsx"
+        baro_file = master_directory / "northfield_poolBT_stage_master.xlsx"
     else:
-        bt_file = None
+        baro_file = None
+        df_baro = None
 
-    return df, site_name, file_type, output_file, bt_file
+    if baro_file is not None and baro_file.exists():
+        df_baro = pd.read_excel(baro_file, header=0, index_col=0, parse_dates=True)
+        if df_baro.index.name != 'Datetime':
+            df_baro.index.name = 'Datetime'
 
+    return df_baro
 
 def calculate_differential_pressure(df, df_baro):
     """
@@ -236,4 +221,55 @@ def calculate_water_level(df, g=9.81):
 
     return df, corrected_water_level_count
 
+def save_formatted_excel(df, output_path):
+    """
+    Save DataFrame to Excel with standard formatting.
+    
+    Args:
+        df (pd.DataFrame): DataFrame to save
+        output_path (str or Path): Path to save the Excel file
+    """
+    with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
+        # Write the DataFrame to Excel
+        df.to_excel(writer, sheet_name='Data')
+        
+        # Get the workbook and worksheet objects
+        workbook = writer.book
+        worksheet = writer.sheets['Data']
+        
+        # Auto-adjust column widths based on content
+        for column in worksheet.columns:
+            max_length = 0
+            column_letter = get_column_letter(column[0].column)
+            
+            for cell in column:
+                try:
+                    if len(str(cell.value)) > max_length:
+                        max_length = len(str(cell.value))
+                except:
+                    pass
+            
+            # Add a little extra width and set the column width
+            adjusted_width = (max_length + 2)
+            worksheet.column_dimensions[column_letter].width = adjusted_width
 
+def autodetect_stage_site(file):
+    """Detects the stage site based on the file name."""
+    if ("22084122" in file.name) or ("cat_beaconsBT" in file.name):
+        return "cat_beaconsBT"
+    elif ("22084123" in file.name) or ("northfield_poolBT" in file.name):
+        return "northfield_poolBT"
+    elif ("22084124" in file.name) or ("chase_usBT" in file.name):
+        return "chase_usBT"
+    elif "cat_beacons_" in file.name:
+        return "cat_beacons"
+    elif "northfield_bridgeBT" in file.name:
+        return "northfield_bridgeBT"
+    elif "northfield_bridge" in file.name:
+        return "northfield_bridge"
+    elif ("chase_us" in file.name) or ("chase_upstream" in file.name):
+        return "chase_us"
+    elif ("chase_ds" in file.name) or ("chase_downstream" in file.name):
+        return "chase_ds"
+    else:
+        return None  # Default case if no match is found
