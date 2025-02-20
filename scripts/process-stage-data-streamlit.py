@@ -4,103 +4,144 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 import os
 from project_utils import (
-    format_and_save_excel,
-    determine_file_type_and_site
+    process_stage_file,
+    calculate_differential_pressure,
+    calculate_water_level,
+    save_formatted_stage_file,
+    autodetect_stage_site,
+    read_baro_file,
 )
 
-def main():
-    st.title("CHRL Tire-Toxin Stage Data Processing")
+st.title("CHRL Tire-Toxin Stage Data Processing")
 
-    # File upload section
-    uploaded_file = st.file_uploader("Upload your new data file (Excel format):", type=["xlsx"])
+# File upload section
+uploaded_file = st.file_uploader("Upload your new data file (Excel format):", type=["xlsx"])
 
-    # Dropdown menu for site name
-    site_options = [
-        "",  # Default empty option
-        "cat_beacons", "chase_ds", "chase_us", "chase_usBT",
-        "northfield_bridge", "northfield_bridgeBT", "northfield_poolBT", "Other"
-    ]
-    user_site_choice = st.selectbox("Select a site name (leave blank for auto-detection):", options=site_options)
+# Define site options
+site_options = [
+    "",  # Default empty option (None)
+    "cat_beacons", "chase_ds", "chase_us", "chase_usBT",
+    "northfield_bridge", "northfield_bridgeBT", "northfield_poolBT", "Other"
+]
 
-    # Initialize user_site_name as None
-    user_site_name = None
+# Initialize detected site
+detected_site = None
 
-    # Allow text input for "Other"
-    if user_site_choice == "Other":
-        user_site_name = st.text_input("Enter a site name (leave blank for auto-detection):")
-        if user_site_name.strip() == "":
-            user_site_name = None
-    elif user_site_choice != "":
-        user_site_name = user_site_choice
+# Only detect site if a file is uploaded
+if uploaded_file is not None:
+    detected_site = autodetect_stage_site(uploaded_file)
 
-    # Display the "Process File" button always (regardless of file upload)
-    process_button_clicked = st.button("Process File")
+# Show selectbox only if a file is uploaded
+if uploaded_file is not None:
+    if detected_site:
+        site_name_label = f"Enter site name (Auto-detected: {detected_site} ✅)"
+        site_options = [detected_site] + [s for s in site_options if s != detected_site]  # Ensure no duplicates
+        site_name = st.selectbox(site_name_label, site_options, index=0)
+    else:
+        site_name = st.selectbox("Enter site name:", site_options, index=None)
 
-    if uploaded_file is not None and process_button_clicked:
-        # Save the uploaded file temporarily
-        temp_file_path = Path(f"temp_{uploaded_file.name}")
-        with open(temp_file_path, "wb") as temp_file:
-            temp_file.write(uploaded_file.getbuffer())
+    # Allow manual entry when "Other" is selected
+    if site_name == "Other":
+        site_name = st.text_input("Please specify the site name:")
 
-        # Determine file type, site, and output file
-        df_new, site_name, file_type, output_file, bt_file = determine_file_type_and_site(temp_file_path)
+if 'process_clicked' not in st.session_state:
+    st.session_state.process_clicked = False
 
-        # Use user-provided site name if given
-        if user_site_name:
-            site_name = user_site_name
+def process_clicked():
+    st.session_state.process_clicked = True
 
-        # Load existing master file or create a new one
-        if output_file.exists():
-            df_master = pd.read_excel(output_file, header=0, index_col=0, parse_dates=True)
-            df_master.index.name = df_master.index.name or 'Datetime'
-            df_unique = df_new[~df_new.index.isin(df_master.index)]
-            df_combined = pd.concat([df_master, df_unique])
-            st.success(f"{len(df_unique)} new data points added to the master file.")
+# Display the "Process File" button always
+st.button("Process File", on_click=process_clicked)
+
+if uploaded_file is not None and st.session_state.process_clicked:
+    # Save the uploaded file temporarily
+    temp_file_path = Path(f"temp_{uploaded_file.name}")
+    with open(temp_file_path, "wb") as temp_file:
+        temp_file.write(uploaded_file.getbuffer())
+
+    # read file
+    df_new = process_stage_file(temp_file_path)
+
+    # Generate the output file path
+    output_directory = Path(r"H:\tire-toxin\data\Discharge\Stage\processed")
+    output_filepath = output_directory / f"{site_name}_stage_master.xlsx"
+
+    # Load existing master file or create a new one
+    if output_filepath.exists():
+        df_master = pd.read_excel(output_filepath, header=0, index_col=0, parse_dates=True)
+        df_master.index.name = df_master.index.name or 'Datetime'
+        df_master.index = pd.to_datetime(df_master.index, errors='coerce')
+        df_unique = df_new[~df_new.index.isin(df_master.index)]
+        df_master = pd.concat([df_master, df_unique])
+        is_new_master_file = False
+    else:
+        df_master = df_new
+        is_new_master_file = True
+        st.warning('An existing master file was not found. A new one will be created upon saving.')
+
+    if 'BT' not in site_name:
+        # Load appropriate master file with baro data
+        df_baro = read_baro_file(site_name)
+        if df_baro is not None:
+            # Apply barometric pressure correction
+            st.write("Applying barometric pressure correction and calculating differential pressure...")
+            df_master, corrected_baro_count, failed_baro_count = calculate_differential_pressure(df_master, df_baro)
+            st.success(f"- Differential Pressure calculations made: {corrected_baro_count}")
+            st.warning(f"- Failed calculations due to missing barometric data: {failed_baro_count}")
+            
+            # Calculate water level
+            st.write("Calculating water level...")
+            df_master, corrected_water_level_count = calculate_water_level(df_master)
+            st.info(f"- Water Level calculations made: {corrected_water_level_count}")
         else:
-            st.success(f"Creating a new master file for {site_name}.")
-            df_combined = df_new
+            st.warning(f"No BT file with barometric data found for {site_name}, skipping barometric pressure correction.")
 
-        # Ensure the combined dataset is sorted
-        df_combined.sort_index(inplace=True)
+    # Handle duplicate timestamps
+    len_preclean = len(df_master)
+    df_master = df_master.groupby(df_master.index).mean()
+    if len_preclean - len(df_master) > 0:
+        st.warning(
+            f"{len_preclean - len(df_master)} duplicate timestamps were averaged during processing."
+        )
+        
+    # quick removal of fill values
+    n_fill = (df_master['Water Level (m)'] < -200).sum()
+    df_master.loc[df_master['Water Level (m)'] < -200, :] = pd.NA
+    st.warning(f'{n_fill} fill values have been removed.')
 
-        # Plot the Water Level time series with existing and new data
+    # Ensure the combined dataset is sorted
+    df_master.sort_index(inplace=True)
+
+    # Completion messages
+    if df_unique.empty:
+        st.warning('No new data detected!')
+    else:
+        st.warning(f'{len(df_unique)} new datapoints detected. Click button below to save to master file.')
+
+    if 'Water Level (m)' in df_master.columns:
         st.write("### Water Level Time Series Plot")
         fig, ax = plt.subplots(figsize=(10, 6))
 
-        # Plot Water Level data from the master file (existing data)
-        if 'df_master' in locals():
-            df_master['Water Level (m)'].plot(ax=ax, label="Existing Data", color='blue', alpha=0.7)
+        # If it's new data (no preexisting master file), plot only the new data
+        if is_new_master_file:
+            df_master['Water Level (m)'].plot(ax=ax, label="Water Level (New)", color='red', alpha=0.7)
+        else:
+            # Plot preexisting data (blue)
+            df_master.loc[~df_master.index.isin(df_unique.index), 'Water Level (m)'].plot(ax=ax, label="Water Level (Existing)", color='blue', alpha=0.7)
 
-        # Plot Water Level data from the new uploaded file
-        if 'df_unique' in locals() and not df_unique.empty:
-            df_unique['Water Level (m)'].plot(ax=ax, label="New Data", color='red', alpha=0.9)
+            # Plot new data (red) if there are any new data points
+            if not df_unique.empty:
+                df_master.loc[df_master.index.isin(df_unique.index), 'Water Level (m)'].plot(ax=ax, label="Water Level (New)", color='red', alpha=0.7)
 
-        # Add title and labels
         ax.set_title(f"Water Level Time Series for {site_name}")
         ax.set_xlabel("Datetime")
         ax.set_ylabel("Water Level (m)")
         ax.legend()
 
-        # Show the plot in Streamlit
         st.pyplot(fig)
 
-        # Hardcoded output file path
-        formatted_date = pd.to_datetime('today').strftime("%Y%m%d")
-        output_directory = f"H:/tire-toxin/data/Discharge/Stage/processed"
-        os.makedirs(output_directory, exist_ok=True)  # Ensure the directory exists
-
-        output_file = f"{output_directory}/{site_name}_{formatted_date}_stage_master.xlsx"
-
-        if st.button("Save Combined Dataset"):
-            try:
-                # Save the combined dataset using the format_and_save_excel function
-                format_and_save_excel(df_combined, Path(output_file))
-                st.success(f"File saved successfully at: {output_file}")
-            except Exception as e:
-                st.error(f"Error saving file: {e}")
-
-    elif uploaded_file is None and process_button_clicked:
-        st.warning("Please upload a file before clicking the Process button.")
-
-if __name__ == "__main__":
-    main()
+    if st.button(f"Save to {site_name} Master Stage File"):
+        os.makedirs(output_directory, exist_ok=True)
+        # save_formatted_excel(df_master, output_filepath)
+        save_formatted_stage_file(df_master, output_filepath)
+        st.success(f"Subset saved to {output_filepath}")
