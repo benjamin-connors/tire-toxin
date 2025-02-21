@@ -5,6 +5,8 @@ import matplotlib.pyplot as plt
 from datetime import datetime
 from openpyxl import load_workbook
 from openpyxl.styles import Font
+from project_utils import get_salt_dump_times
+
 
 # Title of the app
 st.title("CHRL Saltwave Selection")
@@ -74,8 +76,8 @@ if uploaded_file is not None:
             st.error("The uploaded file doesn't match any expected format. Please ensure it contains either 'EC.T' or 'EC.T(uS/cm)' columns.")
             st.stop()
 
-    # remove unwanted columns
-    df = df[['Datetime', 'EC', 'Temp', 'EC.T']]
+    # remove unwanted columns amd arrange in desired order
+    df = df[['Datetime', 'EC.T', 'EC', 'Temp']]
     # Define the datetime column (dt_col)
     dt_col = 'Datetime'  # Now it's 'Datetime' after renaming
     df[dt_col] = pd.to_datetime(df['Datetime'], errors='coerce')
@@ -161,7 +163,19 @@ if uploaded_file is not None:
         sensor_name = st.selectbox("Enter sensor name", ["AT200", "AT201", "AT202", "AT203", "TM7.537", "TM7.538", "Other"], index=None)
         if sensor_name == "Other":
             sensor_name = st.text_input("Please specify the sensor name")
-
+           
+            
+    # Get the min and max datetime values from the dataframe
+    min_time = df[dt_col].min()
+    max_time = df[dt_col].max()
+    
+    # get times  of salt dumps from metadat
+    if stn and stn != "Other":
+        salt_dump_times = get_salt_dump_times(stn)
+        filtered_salt_dump_times = [sdt for sdt in salt_dump_times if min_time <= sdt <= max_time]
+    else:
+        filtered_salt_dump_times = []
+       
     # Plot the data
     fig, ax = plt.subplots(figsize=(10, 6))
 
@@ -172,9 +186,9 @@ if uploaded_file is not None:
     ax.set_ylabel(ec_col)
     ax.grid(True)
 
-    # Get the min and max datetime values from the dataframe
-    min_time = df[dt_col].min()
-    max_time = df[dt_col].max()
+    # Plot vertical lines for each salt dump time within the selected range
+    for sdt in filtered_salt_dump_times:
+        ax.axvline(x=sdt, color='red', linestyle='--', label="Salt Dump")
 
     # Use select_slider with human-readable labels
     start_time, end_time = st.select_slider(
