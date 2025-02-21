@@ -1,11 +1,11 @@
 import os
-from openpyxl.styles import Font, Border, Side, PatternFill
 from openpyxl.utils.dataframe import dataframe_to_rows
 from openpyxl import Workbook
 import pandas as pd
-import numpy as np
 from pathlib import Path
 from openpyxl.utils import get_column_letter
+import gspread
+from config import credentials
 
 # Default decimal formatting
 DEFAULT_DECIMALS = {
@@ -84,13 +84,14 @@ def save_formatted_stage_file(df_corrected, output_file, sheet_name='Sheet1', de
     # Save workbook to file
     workbook.save(output_file)
 
-def process_stage_file(file):
+def read_stage_file(file):
     # Determine file type (bluetooth / non-bluetooth) and load file accordingly
     first_row = pd.read_excel(file, nrows=1, header=None)
     # Define the column order for master files
     master_cols = ['Differential Pressure (kPa)', 'Absolute Pressure (kPa)', 'Temperature (°C)', 'Barometric Pressure (kPa)', 'Water Level (m)']
-
-    if "Plot Title" in str(first_row.iloc[0, 0]):
+    
+    # logics for identifying different input file structures
+    if "Plot Title" in str(first_row.iloc[0, 0]): # Non-BT
         print("Non-BT File Identified. Reading File")
         # Define the column names you want to read from file and read in data
         colnames = ['Datetime', 'Absolute Pressure (kPa)', 'Temperature (°C)']
@@ -102,8 +103,19 @@ def process_stage_file(file):
         # Reorder columns to match final column order
         df = df[master_cols]
 
-    elif "Date-Time" in str(first_row.iloc[0, 1]):
-        print("BT File Detected!")
+    elif "Date-Time" in str(first_row.iloc[0, 1]) and "Absolute Pressure , kPa" in str(first_row.iloc[0, 3]): # BT sensor without stats
+        print("BT File (no stats) Detected!")
+        colnames = ['Datetime', 'Differential Pressure (kPa)', 'Absolute Pressure (kPa)',
+                     'Temperature (°C)', 'Water Level (m)', 'Barometric Pressure (kPa)']
+        df = pd.read_excel(file, header=0, index_col=0, parse_dates=True, usecols="B:G", names=colnames)
+        # Add any missing columns filled with nan
+        for col in master_cols:
+            if col not in df.columns:
+                df[col] = pd.NA
+        # Reorder columns to match final column order
+        df = df[master_cols]
+    elif "Date-Time" in str(first_row.iloc[0, 1]) and "Differential Pressure - Max , kPa" in str(first_row.iloc[0, 3]): # BT sensor with stats
+        print("BT File (with stats) Detected!")
         colnames = ['Datetime', 'Differential Pressure (kPa)', 'Absolute Pressure (kPa)',
                      'Temperature (°C)', 'Water Level (m)', 'Barometric Pressure (kPa)']
         df = pd.read_excel(file, header=0, index_col=0, parse_dates=True, usecols="B:G", names=colnames)
@@ -273,3 +285,46 @@ def autodetect_stage_site(file):
         return "chase_ds"
     else:
         return None  # Default case if no match is found
+    
+def get_salt_dump_times(site_name):
+    # Mapping of input site_name to sheet's Site_Name values
+    site_name_mapping = {
+        'northfield': 'Northfield',
+        'chase_bridge': 'Chase Bridge',
+        'cat_beacons': 'Cat Creek (Beaconsfield)'
+    }
+
+    # Check if the input site_name is valid
+    if site_name not in site_name_mapping:
+        raise ValueError(f"Invalid site name: {site_name}. Expected one of 'northfield', 'chase bridge', or 'cat_beacons'.")
+
+    # Get the corresponding sheet Site_Name
+    mapped_site_name = site_name_mapping[site_name]
+
+    # Connect to Google Sheets
+    gc = gspread.service_account_from_dict(credentials)
+
+    # Open the Google Sheet by URL
+    sheet_url = "https://docs.google.com/spreadsheets/d/1JLbDJq4qAfAyzEpOuxYYjhfXd4FxvotUc8JaBCsSdKE/edit?gid=748389405"
+    sh = gc.open_by_url(sheet_url)
+
+    # List to hold all salt dump times
+    salt_dump_times = []
+
+    # Loop through all worksheets
+    for ws in sh.worksheets():
+        # Read worksheet into DataFrame
+        df_ws = pd.DataFrame(ws.get_all_records())
+
+        # Filter rows where 'Site_Name' matches the mapped site_name
+        filtered_df = df_ws[df_ws['Site_Name'] == mapped_site_name]
+
+        # Filter out rows where 'Salt_Dump.Time_of_Salt_Dump' is NaN or empty
+        valid_salt_dump_times = filtered_df['Salt_Dump.Time_of_Salt_Dump'].dropna()
+
+        # Convert the valid 'Salt_Dump.Time_of_Salt_Dump' values to datetime
+        salt_dump_times.extend(pd.to_datetime(valid_salt_dump_times, errors='coerce'))
+
+    return salt_dump_times
+
+    
