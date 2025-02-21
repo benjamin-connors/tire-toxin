@@ -174,7 +174,7 @@ if uploaded_file is not None:
         st.session_state.dump_times_retrieved = False
     
     # Only retrieve salt dump times once
-    if stn and stn != "Other" and not st.session_state.dump_times_retrieved:
+    if stn and stn != "Other" and not st.session_state.dump_times_retrieved and sensor_loc != 'baseline':
         salt_dump_times = get_salt_dump_times(stn)  # Fetch the salt dump times for the site
         filtered_salt_dump_times = [sdt for sdt in salt_dump_times if min_time <= sdt <= max_time]
         st.session_state.dump_times_retrieved = True  # Set the flag to True to prevent fetching again
