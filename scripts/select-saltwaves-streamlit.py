@@ -173,12 +173,16 @@ if uploaded_file is not None:
     if 'dump_times_retrieved' not in st.session_state:
         st.session_state.dump_times_retrieved = False
     
-    filtered_salt_dump_times = []
-    # Only retrieve salt dump times once
-    if stn and stn != "Other" and not st.session_state.dump_times_retrieved and sensor_loc != 'baseline':
-        salt_dump_times = get_salt_dump_times(stn)  # Fetch the salt dump times for the site
-        filtered_salt_dump_times = [sdt for sdt in salt_dump_times if min_time <= sdt <= max_time]
-        st.session_state.dump_times_retrieved = True  # Set the flag to True to prevent fetching again
+    # Ensure salt dump times are retrieved and stored in session state
+    if stn and stn != "Other" and sensor_loc != 'baseline':
+        if not st.session_state.get('dump_times_retrieved', False):
+            salt_dump_times = get_salt_dump_times(stn)
+            filtered_salt_dump_times = [sdt for sdt in salt_dump_times if min_time <= sdt <= max_time]
+            st.session_state['filtered_salt_dump_times'] = filtered_salt_dump_times  # Store in session state
+            st.session_state['dump_times_retrieved'] = True  # Set the flag
+        else:
+            # If already retrieved, just use the stored values
+            filtered_salt_dump_times = st.session_state.get('filtered_salt_dump_times', [])
 
     # Plot the data
     fig, ax = plt.subplots(figsize=(10, 6))
@@ -191,7 +195,7 @@ if uploaded_file is not None:
     ax.grid(True)
 
     # Plot vertical lines for each salt dump time within the selected range
-    if st.session_state.dump_times_retrieved:
+    if 'filtered_salt_dump_times' in locals() and filtered_salt_dump_times:
         for sdt in filtered_salt_dump_times:
             ax.axvline(x=sdt, color='red', linestyle='--', label="Salt Dump")
 
