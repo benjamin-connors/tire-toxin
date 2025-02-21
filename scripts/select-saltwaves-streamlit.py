@@ -169,12 +169,17 @@ if uploaded_file is not None:
     min_time = df[dt_col].min()
     max_time = df[dt_col].max()
     
-    # get times  of salt dumps from metadat
-    if stn and stn != "Other":
-        salt_dump_times = get_salt_dump_times(stn)
+    # Initialize the flag for checking if salt dump times have been retrieved
+    if 'dump_times_retrieved' not in st.session_state:
+        st.session_state.dump_times_retrieved = False
+    
+    # Only retrieve salt dump times once
+    if stn and stn != "Other" and not st.session_state.dump_times_retrieved:
+        salt_dump_times = get_salt_dump_times(stn)  # Fetch the salt dump times for the site
         filtered_salt_dump_times = [sdt for sdt in salt_dump_times if min_time <= sdt <= max_time]
-    else:
-        filtered_salt_dump_times = []
+        st.session_state.dump_times_retrieved = True  # Set the flag to True to prevent fetching again
+    elif not st.session_state.dump_times_retrieved:
+        filtered_salt_dump_times = []  # If no salt dump times or if already retrieved, leave
        
     # Plot the data
     fig, ax = plt.subplots(figsize=(10, 6))
