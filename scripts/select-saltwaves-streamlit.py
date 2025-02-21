@@ -192,8 +192,9 @@ if uploaded_file is not None:
     ax.grid(True)
 
     # Plot vertical lines for each salt dump time within the selected range
-    for sdt in filtered_salt_dump_times:
-        ax.axvline(x=sdt, color='red', linestyle='--', label="Salt Dump")
+    if st.session_state.dump_times_retrieved:
+        for sdt in filtered_salt_dump_times:
+            ax.axvline(x=sdt, color='red', linestyle='--', label="Salt Dump")
 
     # Use select_slider with human-readable labels
     start_time, end_time = st.select_slider(
