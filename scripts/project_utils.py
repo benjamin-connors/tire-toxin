@@ -6,6 +6,7 @@ from pathlib import Path
 from openpyxl.utils import get_column_letter
 import gspread
 from config import credentials
+from openpyxl.styles import Font, Side, Border
 
 # Default decimal formatting
 DEFAULT_DECIMALS = {
@@ -84,7 +85,7 @@ def save_formatted_stage_file(df_corrected, output_file, sheet_name='Sheet1', de
     # Save workbook to file
     workbook.save(output_file)
 
-def read_stage_file(file):
+def read_stage_file(file, stats_flag=True):
     # Determine file type (bluetooth / non-bluetooth) and load file accordingly
     first_row = pd.read_excel(file, nrows=1, header=None)
     # Define the column order for master files
@@ -114,17 +115,31 @@ def read_stage_file(file):
                 df[col] = pd.NA
         # Reorder columns to match final column order
         df = df[master_cols]
-    elif "Date-Time" in str(first_row.iloc[0, 1]) and "Differential Pressure - Max , kPa" in str(first_row.iloc[0, 3]): # BT sensor with stats
+        
+    elif "Date-Time" in str(first_row.iloc[0, 1]) and "Differential Pressure - Max , kPa" in str(first_row.iloc[0, 3]) and stats_flag==True: # BT sensor with stats
         print("BT File (with stats) Detected!")
         colnames = ['Datetime', 'Differential Pressure (kPa)', 'Absolute Pressure (kPa)',
                      'Temperature (°C)', 'Water Level (m)', 'Barometric Pressure (kPa)']
-        df = pd.read_excel(file, header=0, index_col=0, parse_dates=True, usecols="B:G", names=colnames)
+        df = pd.read_excel(file, header=0, index_col=0, parse_dates=True, usecols="B,F,K,P,S,R", names=colnames)
         # Add any missing columns filled with nan
         for col in master_cols:
             if col not in df.columns:
                 df[col] = pd.NA
         # Reorder columns to match final column order
         df = df[master_cols]
+        
+    elif "Date-Time" in str(first_row.iloc[0, 1]) and "Differential Pressure - Max , kPa" in str(first_row.iloc[0, 3]) and stats_flag==False: # BT sensor with stats (ignore stats)
+        print("BT File (with stats) Detected!")
+        colnames = ['Datetime', 'Differential Pressure (kPa)', 'Absolute Pressure (kPa)',
+                     'Temperature (°C)', 'Water Level (m)', 'Barometric Pressure (kPa)']
+        df = pd.read_excel(file, header=0, index_col=0, parse_dates=True, usecols="B,C,H,M,S,R", names=colnames)
+        # Add any missing columns filled with nan
+        for col in master_cols:
+            if col not in df.columns:
+                df[col] = pd.NA
+        # Reorder columns to match final column order
+        df = df[master_cols]
+    
     else:
         raise ValueError("Unknown file format")
 
@@ -311,8 +326,10 @@ def get_salt_dump_times(site_name):
     # List to hold all salt dump times
     salt_dump_times = []
 
-    # Loop through all worksheets
-    for ws in sh.worksheets():
+    # Read all worksheets into memory at once (optimized)
+    worksheets = sh.worksheets()
+
+    for ws in worksheets:
         # Read worksheet into DataFrame
         df_ws = pd.DataFrame(ws.get_all_records())
 
@@ -326,5 +343,6 @@ def get_salt_dump_times(site_name):
         salt_dump_times.extend(pd.to_datetime(valid_salt_dump_times, errors='coerce'))
 
     return salt_dump_times
+
 
     
