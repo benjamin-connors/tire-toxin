@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 import os
 from project_utils import (
-    process_stage_file,
+    read_stage_file,
     calculate_differential_pressure,
     calculate_water_level,
     save_formatted_stage_file,
@@ -49,6 +49,13 @@ if 'process_clicked' not in st.session_state:
 
 def process_clicked():
     st.session_state.process_clicked = True
+    
+# Create a stats checkbox
+stats_checkbox = st.checkbox("Do you want to use statistic data if available?")
+if stats_checkbox:
+    stats_flag = True
+else:
+    stats_flag = False
 
 # Display the "Process File" button always
 st.button("Process File", on_click=process_clicked)
@@ -60,7 +67,14 @@ if uploaded_file is not None and st.session_state.process_clicked:
         temp_file.write(uploaded_file.getbuffer())
 
     # read file
-    df_new = process_stage_file(temp_file_path)
+    df_new = read_stage_file(temp_file_path, stats_flag=stats_flag)
+    
+    st.write(df_new)
+    
+    # # CORRECTION FOR NORTHFIELD WATER LEVEL (see project data notes)
+    # if site_name == 'northfield_poolBT':
+    #     correction_time = pd.to_datetime("2024-12-17 13:42:00")
+    #     df_new.loc[df_new.index > correction_time, 'Water Level (m)'] += 0.5550484190348302
 
     # Generate the output file path
     output_directory = Path(r"H:\tire-toxin\data\Discharge\Stage\processed")
@@ -72,8 +86,16 @@ if uploaded_file is not None and st.session_state.process_clicked:
         df_master.index.name = df_master.index.name or 'Datetime'
         df_master.index = pd.to_datetime(df_master.index, errors='coerce')
         df_unique = df_new[~df_new.index.isin(df_master.index)]
+        # CORRECTION FOR NORTHFIELD WATER LEVEL (see project data notes)
+        if site_name == 'northfield_poolBT':
+            correction_time = pd.to_datetime("2024-12-17 13:42:00")
+            df_unique.loc[df_unique.index > correction_time, 'Water Level (m)'] += df_master['Water Level (m)'].iloc[-1]
+            st.write(rf'last in master = {df_master['Water Level (m)'].iloc[-1]}')
         df_master = pd.concat([df_master, df_unique])
         is_new_master_file = False
+        
+
+        
     else:
         df_master = df_new
         is_new_master_file = True
@@ -105,8 +127,9 @@ if uploaded_file is not None and st.session_state.process_clicked:
         )
         
     # quick removal of fill values
-    n_fill = (df_master['Water Level (m)'] < -200).sum()
+    n_fill = (df_master['Water Level (m)'] < -200).sum() + (df_master['Water Level (m)'] > 10).sum()
     df_master.loc[df_master['Water Level (m)'] < -200, :] = pd.NA
+    df_master.loc[df_master['Water Level (m)'] > 10, :] = pd.NA
     st.warning(f'{n_fill} fill values have been removed.')
 
     # Ensure the combined dataset is sorted
